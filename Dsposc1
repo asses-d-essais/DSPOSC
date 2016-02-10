@@ -1,0 +1,83 @@
+#include <mem.h>
+#include <ESP8266WiFi.h>
+#include <WiFiUDP.h>
+#include <OSCMessage.h>
+
+int buttonPin = 2;
+
+boolean currentState = HIGH;//stroage for current measured button state
+boolean lastState = HIGH;//storage for last measured button state
+boolean debouncedState = HIGH;//debounced button state
+
+int debounceInterval = 5;//wait 5 ms for button pin to settle
+unsigned long timeOfLastButtonEvent = 0;//store the last time the button state changed
+
+
+
+// A UDP instance to let us send and receive packets over UDP
+WiFiUDP Udp;
+const IPAddress outIp(192, 168, 1, 3);
+const unsigned int outPort = 8001;
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("Configuration...");
+  pinMode(buttonPin, INPUT_PULLUP);
+  
+  // set up soft Access Point (acts as wireless base station)
+  //WiFi.mode(WIFI_AP);
+  //WiFi.softAP("ESPOSC");
+    // connection au réseau
+  WiFi.begin("ESPOSC", "jolapatate");
+  // on attend que la connection soit terminée
+  while(WiFi.status() != WL_CONNECTED) {
+    delay(500);
+  }
+ 
+  Udp.begin(8000);
+ 
+  delay (1000);
+  Serial.println("WiFi Access Point: ESPOSC");
+  delay (500);
+  Serial.println("WiFi Access Point: ESPOSC");
+  Serial.println(WiFi.softAPIP());
+}
+
+void loop() {
+  
+  currentState = digitalRead(buttonPin);
+  unsigned long currentTime = millis();
+  
+  if (currentState != lastState){
+    timeOfLastButtonEvent = currentTime;
+  }
+  
+  if (currentTime - timeOfLastButtonEvent > debounceInterval){//if enough time has passed
+    if (currentState != debouncedState){//if the current state is still different than our last stored debounced state
+      debouncedState = currentState;//update the debounced state
+      
+      //trigger an event
+      if (debouncedState == LOW){
+        Serial.println("pressed");
+        OSCMessage trig("/play");
+        trig.add(1);
+        Udp.beginPacket(outIp, outPort);
+        trig.send(Udp);
+        Udp.endPacket();
+        trig.empty();
+      } else {
+        Serial.println("released");
+        OSCMessage trig("/play");
+        trig.add(0);
+        Udp.beginPacket(outIp, outPort);
+        trig.send(Udp);
+        Udp.endPacket();
+        trig.empty();  
+      }
+    }
+  }
+  
+  lastState = currentState;
+  
+  delay(10);
+}
